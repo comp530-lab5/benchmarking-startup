@@ -10,10 +10,12 @@
 #include <errno.h>
 
 enum Test_type {
-    IO_SIZE,
-    IO_STRIDE,
-    RANDOM_IO,
-    READ_V_WRITE
+    IO_SIZE_R,
+    IO_SIZE_W,
+    IO_STRIDE_R,
+    IO_STRIDE_W,
+    RANDOM_IO_R,
+    RANDOM_IO_W
 };
 
 enum Device {
@@ -23,27 +25,31 @@ enum Device {
 
 // Function prototypes
 void help();
-void io_size_test(const char *device, size_t block_size);
-void io_stride_test(const char *device, size_t block_size, size_t stride_size);
+void io_size_test_R(const char *device, size_t block_size);
+void io_size_test_W(const char *device, size_t block_size);
+void io_stride_test_R(const char *device, size_t block_size, size_t stride_size);
+void io_stride_test_W(const char *device, size_t block_size, size_t stride_size);
 
 void help() {
     printf("Benchmarking tests\n");
     printf("Options:\n");
-    printf("\t-t - test type - I/0 Size (1), I/O Stride (2), Random I/O (3), Read vs. Write (4)\n");
+    printf("\t-t - test type - I/0 Size R/W (1/2), I/O Stride R/W (3/4), Random I/O R/W (5/6)\n");
     printf("\t-d - device - HDD (1), SSD (2)\n");
     printf("\t-b - block size in bytes (e.g., 4096 for 4KB)\n");
     printf("\t-s - stride size in bytes (optional, only for I/O Stride test)\n");
     printf("\t-h - help\n");
 }
 
-void io_size_test(const char *device, size_t block_size) {
+/* Sequentially write a range of logical blocks up to 1 GB, in different granularities.
+ * Measure the throughput (i.e., 1 GB divided by the execution time of the writes) */
+void io_size_test_W(const char *device, size_t block_size) {
     int fd = open(device, O_WRONLY | O_DIRECT);
     if (fd < 0) {
         perror("Failed to open device");
         return;
     }
 
-    void *buffer = aligned_alloc(512, block_size);
+    void *buffer = aligned_alloc(1024, block_size);
     if (!buffer) {
         perror("Failed to allocate buffer");
         close(fd);
@@ -69,7 +75,7 @@ void io_size_test(const char *device, size_t block_size) {
     fsync(fd);
     gettimeofday(&end, NULL);
 
-    double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
+    double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6; // time in seconds
     double throughput = (double)written / elapsed / (1024 * 1024); // MB/s
     
     printf("I/O Size Test: Device: %s, Block size: %zu bytes, Throughput: %.2f MB/s\n", 
@@ -79,15 +85,16 @@ void io_size_test(const char *device, size_t block_size) {
     close(fd);
 }
 
-// Test for I/O Stride
-void io_stride_test(const char *device, size_t block_size, size_t stride_size) {
+// Test for I/O Stride, write
+/* Same as previous test, leaves a configurable amount of space between each I/O request in the sequential write */
+void io_stride_test_W(const char *device, size_t block_size, size_t stride_size) {
     int fd = open(device, O_WRONLY | O_DIRECT);
     if (fd < 0) {
         perror("Failed to open device");
         return;
     }
 
-    void *buffer = aligned_alloc(512, block_size);
+    void *buffer = aligned_alloc(1024, block_size);
     if (!buffer) {
         perror("Failed to allocate buffer");
         close(fd);
@@ -140,7 +147,7 @@ int main(int argc, char **argv) {
                 return 0;
             case 't':
                 test_type = atoi(optarg) - 1;
-                if (test_type < 0 || test_type > 3) {
+                if (test_type < 0 || test_type > 6) {
                     printf("Incorrect test type\n");
                     help();
                     return 1;
@@ -181,16 +188,27 @@ int main(int argc, char **argv) {
     const char *device_path = (device == 1) ? "/dev/sda2" : "/dev/sdb1";
 
     switch (test_type) {
-        case 0:
-            io_size_test(device_path, block_size);
+        case IO_SIZE_R:
+            io_size_test_R(device_path, block_size);
             break;
-        case 1:
+        case IO_SIZE_W:
+            io_size_test_W(device_path, block_size);
+            break;
+        case IO_STRIDE_R:
             if (stride_size == 0) {
                 printf("Stride size required for I/O Stride test\n");
                 help();
                 return 1;
             }
-            io_stride_test(device_path, block_size, stride_size);
+            io_stride_test_R(device_path, block_size, stride_size);
+            break;
+        case IO_STRIDE_W:
+            if (stride_size == 0) {
+                printf("Stride size required for I/O Stride test\n");
+                help();
+                return 1;
+            }
+            io_stride_test_W(device_path, block_size, stride_size);
             break;
         default:
             printf("Test type not yet implemented\n");
