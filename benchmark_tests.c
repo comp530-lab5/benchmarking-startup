@@ -43,7 +43,14 @@ void io_size_test(const char *device, size_t block_size) {
         return;
     }
 
-    void *buffer = aligned_alloc(512, block_size);
+
+    void *buffer = aligned_alloc(4096, block_size);
+    if (block_size % 4096 != 0) {
+        fprintf(stderr, "Block size must be a multiple of 4 KB for O_DIRECT.\n");
+        free(buffer);
+        close(fd);
+        return;
+    }
     if (!buffer) {
         perror("Failed to allocate buffer");
         close(fd);
@@ -87,13 +94,19 @@ void io_stride_test(const char *device, size_t block_size, size_t stride_size) {
         return;
     }
 
-    void *buffer = aligned_alloc(512, block_size);
+    void *buffer = aligned_alloc(4096, block_size);
+    if (block_size % 4096 != 0) {
+        fprintf(stderr, "Block size must be a multiple of 4 KB for O_DIRECT.\n");
+        free(buffer);
+        close(fd);
+        return;
+    }
     if (!buffer) {
         perror("Failed to allocate buffer");
         close(fd);
         return;
     }
-
+    
     memset(buffer, 0, block_size);
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     size_t written = 0;
