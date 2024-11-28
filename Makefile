@@ -1,6 +1,6 @@
 all: benchmark_tests
 
-CFLAGS += -g -Wall -Werror
+CFLAGS += -g -Wall -Werror -D_GNU_SOURCE 
 
 %.o: %.c *.h
 	gcc $(CFLAGS) -c -o $@ $<

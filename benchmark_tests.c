@@ -40,8 +40,61 @@ void help() {
     printf("\t-h - help\n");
 }
 
+// Test for I/O Size, Read
+/* Sequentially read a range of logical blocks up to 1 GB, in different granularities.
+ * Measure the throughput (i.e., 1 GB divided by the execution time of the reads) */
+// device - 0 for HDD, 1 for SSD
+// block_size - size of chunks to write to disk at a time
+void io_size_test_R(const char *device, size_t block_size) {
+    int fd = open(device, O_RDONLY | O_DIRECT);
+    if (fd < 0) {
+        perror("Failed to open device");
+        return;
+    }
+
+    void *buffer = aligned_alloc(1024, block_size); // Allocates a block worth of memory 
+    if (!buffer) {
+        perror("Failed to allocate buffer");
+        close(fd);
+        return;
+    }
+    memset(buffer, 1, block_size); // memset to ensure buffer is cached and doesn't bottleneck test
+
+    size_t total_bytes = 1L * 1024 * 1024 * 1024; // total memory is 1 GB
+    size_t bytes_read = 0; // number of written bytes
+
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+
+    while (bytes_read < total_bytes) {
+        fprintf(stderr, "bytes read: %ld, total,bytes: %ld\n", bytes_read, total_bytes);
+        ssize_t bytes = read(fd, buffer, block_size);
+        if (bytes < 0) {
+            perror("Read failed");
+            break;
+        }
+        bytes_read += bytes;
+    }
+
+    gettimeofday(&end, NULL);
+
+    double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6; // time in seconds
+    double throughput = (double)bytes_read / elapsed / (1024 * 1024); // MB/s
+    
+    printf("I/O Size Test: Device: %s, Block size: %zu bytes, Throughput: %.2f MB/s\n", 
+    device, block_size, throughput);
+
+    free(buffer);
+    close(fd);
+}
+
+
+
+// Test for I/O Size, Write
 /* Sequentially write a range of logical blocks up to 1 GB, in different granularities.
  * Measure the throughput (i.e., 1 GB divided by the execution time of the writes) */
+// device - 0 for HDD, 1 for SSD
+// block_size - size of chunks to write to disk at a time
 void io_size_test_W(const char *device, size_t block_size) {
     int fd = open(device, O_WRONLY | O_DIRECT);
     if (fd < 0) {
@@ -49,7 +102,7 @@ void io_size_test_W(const char *device, size_t block_size) {
         return;
     }
 
-    void *buffer = aligned_alloc(1024, block_size);
+    void *buffer = aligned_alloc(1024, block_size); // Allocates a block worth of memory 
     if (!buffer) {
         perror("Failed to allocate buffer");
         close(fd);
@@ -85,6 +138,55 @@ void io_size_test_W(const char *device, size_t block_size) {
     close(fd);
 }
 
+
+
+// Test for I/O Stride, read
+/* Same as previous test, leaves a configurable amount of space between each I/O request in the sequential read */
+void io_stride_test_R(const char *device, size_t block_size, size_t stride_size) {
+    int fd = open(device, O_RDONLY | O_DIRECT);
+    if (fd < 0) {
+        perror("Failed to open device");
+        return;
+    }
+
+    void *buffer = aligned_alloc(1024, block_size);
+    if (!buffer) {
+        perror("Failed to allocate buffer");
+        close(fd);
+        return;
+    }
+    memset(buffer, 1, block_size); // ensure buffer is cached
+
+    size_t total_bytes = 1L * 1024 * 1024 * 1024;
+    size_t bytes_read = 0;
+    off_t offset = 0; // keeps track of the current logical block address for the next write
+
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+
+    while (bytes_read < total_bytes) {
+        ssize_t bytes = pread(fd, buffer, block_size, offset);
+        if (bytes < 0) {
+            perror("Read failed");
+            break;
+        }
+        bytes_read += bytes + offset; // this way, we only read up to total_bytes and not more than that
+        offset += block_size + stride_size; // advance by block size + stride
+    }
+
+    gettimeofday(&end, NULL);
+
+    double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
+    double throughput = (double)bytes_read / elapsed / (1024 * 1024); // MB/s
+
+    printf("I/O Stride Test: Device: %s, Block size: %zu bytes, Stride: %zu bytes, Throughput: %.2f MB/s\n", device, block_size, stride_size, throughput);
+
+    free(buffer);
+    close(fd);
+}
+
+
+
 // Test for I/O Stride, write
 /* Same as previous test, leaves a configurable amount of space between each I/O request in the sequential write */
 void io_stride_test_W(const char *device, size_t block_size, size_t stride_size) {
@@ -115,7 +217,7 @@ void io_stride_test_W(const char *device, size_t block_size, size_t stride_size)
             perror("Write failed");
             break;
         }
-        written += bytes;
+        written += bytes + offset; // this way we only write up to total_bytes, not more
         offset += block_size + stride_size; // advance by block size + stride
     }
 
@@ -130,6 +232,8 @@ void io_stride_test_W(const char *device, size_t block_size, size_t stride_size)
     free(buffer);
     close(fd);
 }
+
+
 
 // Main function
 int main(int argc, char **argv) {
@@ -154,7 +258,7 @@ int main(int argc, char **argv) {
                 }
                 break;
             case 'd':
-                device = atoi(optarg) - 1;
+                device = atoi(optarg);
                 if (device != 1 && device != 2) {
                     printf("Incorrect device type\n");
                     help();
