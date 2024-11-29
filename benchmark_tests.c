@@ -29,6 +29,8 @@ void io_size_test_R(const char *device, size_t block_size);
 void io_size_test_W(const char *device, size_t block_size);
 void io_stride_test_R(const char *device, size_t block_size, size_t stride_size);
 void io_stride_test_W(const char *device, size_t block_size, size_t stride_size);
+void io_random_test_R(const char *device, size_t block_size);
+void io_random_test_W(const char *device, size_t block_size);
 
 void help() {
     printf("Benchmarking tests\n");
@@ -235,6 +237,57 @@ void io_stride_test_W(const char *device, size_t block_size, size_t stride_size)
 
 
 
+
+// Test for Random I/O, write
+/* Same as previous test, leaves a random amount of space between each I/O request in the sequential write instead of configurable
+ * Random I/O access within a 1 GB swath at block_size granularity */
+void io_stride_test_W(const char *device, size_t block_size) {
+    int fd = open(device, O_WRONLY | O_DIRECT);
+    if (fd < 0) {
+        perror("Failed to open device");
+        return;
+    }
+
+    void *buffer = aligned_alloc(1024, block_size);
+    if (!buffer) {
+        perror("Failed to allocate buffer");
+        close(fd);
+        return;
+    }
+
+    memset(buffer, 0, block_size);
+    size_t total_bytes = 1L * 1024 * 1024 * 1024;
+    size_t written = 0;
+    off_t offset = 0; // keeps track of the current logical block address for the next write
+    // generate an array of offset values based on smallest block size, loop through them to simulate randomness
+
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+
+    while (written < total_bytes) {
+        ssize_t bytes = pwrite(fd, buffer, block_size, offset);
+        if (bytes < 0) {
+            perror("Write failed");
+            break;
+        }
+        written += bytes + offset; // this way we only write up to total_bytes, not more
+        offset += block_size + stride_size; // advance by block size + stride
+    }
+
+    fsync(fd);
+    gettimeofday(&end, NULL);
+
+    double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
+    double throughput = (double)written / elapsed / (1024 * 1024); // MB/s
+
+    printf("I/O Stride Test: Device: %s, Block size: %zu bytes, Stride: %zu bytes, Throughput: %.2f MB/s\n", device, block_size, stride_size, throughput);
+
+    free(buffer);
+    close(fd);
+}
+
+
+
 // Main function
 int main(int argc, char **argv) {
     enum Test_type test_type = -1;
@@ -314,8 +367,14 @@ int main(int argc, char **argv) {
             }
             io_stride_test_W(device_path, block_size, stride_size);
             break;
+        case RANDOM_IO_R:
+            io_random_test_R(device_path, block_size);
+            break;
+        case RANDOM_IO_W:
+            io_random_test_W(device_path, block_size);
+            break;
         default:
-            printf("Test type not yet implemented\n");
+            printf("Test type not yet implemented - should never happen\n");
             break;
     }
 
