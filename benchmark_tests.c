@@ -72,18 +72,30 @@ void io_size_test_R(const char *device, size_t block_size) {
 
     size_t total_bytes = 1L * 1024 * 1024 * 1024; // total memory is 1 GB
     size_t bytes_read = 0; // number of written bytes
+    size_t disk_size = (strcmp(device, "/dev/sdb1") == 0) ? 512L * 1024 * 1024 : total_bytes; // 512 MB for SSD
+    int loops = (total_bytes > disk_size) ? 2 : 1; // Loop twice for SSD
+
     srand(time(NULL));
     struct timeval start, end;
     gettimeofday(&start, NULL);
 
-    while (bytes_read + block_size <= total_bytes) {
-        fprintf(stderr, "bytes read: %ld, total,bytes: %ld\n", bytes_read, total_bytes);
-        ssize_t bytes = read(fd, buffer, block_size);
-        if (bytes < 0) {
-            perror("Read failed");
-            break;
+    for (int i = 0; i < loops; i++) {
+        size_t bytes_read = 0;
+        while (bytes_read + block_size <= disk_size) {
+            ssize_t bytes = read(fd, buffer, block_size);
+            if (bytes < 0) {
+                perror("Read failed");
+                break;
+            }
+            bytes_read += bytes;
         }
-        bytes_read += bytes;
+
+        if (i < loops - 1) {
+            if (lseek(fd, 0, SEEK_SET) < 0) {
+                perror("Failed to reset file cursor");
+                break;
+            }
+        }
     }
 
     gettimeofday(&end, NULL);
@@ -97,10 +109,7 @@ void io_size_test_R(const char *device, size_t block_size) {
     free(buffer);
     close(fd);
 
-    int passed_device = 1;
-    if(strcmp("/dev/sda2", device)) { // device is hdd
-        passed_device = 0;
-    }
+    int passed_device = strcmp(device, "/dev/sda2") == 0 ? 0 : 1; // 0 for HDD, 1 for SSD
     write_results(IO_SIZE_R, passed_device, block_size, 0, throughput);
 }
 
@@ -129,18 +138,31 @@ void io_size_test_W(const char *device, size_t block_size) {
     memset(buffer, 0, block_size); // fill buffer with zeros to start
     size_t total_bytes = 1L * 1024 * 1024 * 1024; // total memory is 1 GB
     size_t written = 0; // number of written bytes
+    size_t disk_size = (strcmp(device, "/dev/sdb1") == 0) ? 512L * 1024 * 1024 : total_bytes; // 512 MB for SSD
+    int loops = (total_bytes > disk_size) ? 2 : 1; // Number of loops based on disk size
     srand(time(NULL));
     struct timeval start, end;
     gettimeofday(&start, NULL);
 
-    while (written  + block_size <= total_bytes) {
-        ssize_t bytes = write(fd, buffer, block_size);
-        if (bytes < 0) {
-            perror("Write failed");
-            break;
+    for (int i = 0; i < loops; i++) {
+        written = 0;
+        while (written + block_size <= disk_size) {
+            ssize_t bytes = write(fd, buffer, block_size);
+            if (bytes < 0) {
+                perror("Write failed");
+                break;
+            }
+            written += bytes;
         }
-        written += bytes;
+
+        if (i < loops - 1) {
+            if (lseek(fd, 0, SEEK_SET) < 0) { // Reset the file cursor to the beginning
+                perror("Failed to reset file cursor");
+                break;
+            }
+        }
     }
+
 
     fsync(fd);
     gettimeofday(&end, NULL);
@@ -154,10 +176,7 @@ void io_size_test_W(const char *device, size_t block_size) {
     free(buffer);
     close(fd);
 
-    int passed_device = 1;
-    if(strcmp("/dev/sda2", device)) { // device is hdd
-        passed_device = 0;
-    }
+    int passed_device = strcmp(device, "/dev/sda2") == 0 ? 0 : 1; // 0 for HDD, 1 for SSD
     write_results(IO_SIZE_W, passed_device, block_size, 0, throughput);
 }
 
@@ -183,20 +202,31 @@ void io_stride_test_R(const char *device, size_t block_size, size_t stride_size)
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     size_t bytes_traversed = 0;
     // size_t bytes_read = 0;
-    off_t offset = 0; // keeps track of the current logical block address for the next write
+    size_t disk_size = (strcmp(device, "/dev/sdb1") == 0) ? 512L * 1024 * 1024 : total_bytes; // 512 MB for SSD
+    int loops = (total_bytes > disk_size) ? 2 : 1;
     srand(time(NULL));
     struct timeval start, end;
     gettimeofday(&start, NULL);
 
-    while (bytes_traversed  + block_size + offset <= total_bytes) {
-        ssize_t bytes = pread(fd, buffer, block_size, offset);
-        if (bytes < 0) {
-            perror("Read failed");
-            break;
+    for (int i = 0; i < loops; i++) {
+        size_t bytes_traversed = 0;
+        off_t offset = 0;  // keeps track of the current logical block address for the next write
+        while (bytes_traversed + block_size <= disk_size) {
+            ssize_t bytes = pread(fd, buffer, block_size, offset);
+            if (bytes < 0) {
+                perror("Read failed");
+                break;
+            }
+            bytes_traversed += bytes;
+            offset += block_size + stride_size;
         }
-        bytes_traversed += bytes; // this way, we only read up to total_bytes and not more than that
-        // bytes_read += bytes;
-        offset += block_size + stride_size; // advance by block size + stride
+
+        if (i < loops - 1) {
+            if (lseek(fd, 0, SEEK_SET) < 0) {
+                perror("Failed to reset file cursor");
+                break;
+            }
+        }
     }
 
     gettimeofday(&end, NULL);
@@ -209,10 +239,7 @@ void io_stride_test_R(const char *device, size_t block_size, size_t stride_size)
     free(buffer);
     close(fd);
 
-    int passed_device = 1;
-    if(strcmp("/dev/sda2", device)) { // device is hdd
-        passed_device = 0;
-    }
+    int passed_device = strcmp(device, "/dev/sda2") == 0 ? 0 : 1; // 0 for HDD, 1 for SSD
     write_results(IO_STRIDE_R, passed_device, block_size, stride_size, throughput);
 }
 
@@ -238,20 +265,31 @@ void io_stride_test_W(const char *device, size_t block_size, size_t stride_size)
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     // size_t written = 0;
     size_t bytes_traversed = 0;
-    off_t offset = 0; // keeps track of the current logical block address for the next write
+    size_t disk_size = (strcmp(device, "/dev/sdb1") == 0) ? 512L * 1024 * 1024 : total_bytes; // 512 MB for SSD
+    int loops = (total_bytes > disk_size) ? 2 : 1;
     srand(time(NULL));
     struct timeval start, end;
     gettimeofday(&start, NULL);
 
-    while (bytes_traversed  + block_size + offset <= total_bytes) {
-        ssize_t bytes = pwrite(fd, buffer, block_size, offset);
-        if (bytes < 0) {
-            perror("Write failed");
-            break;
+    for (int i = 0; i < loops; i++) {
+        size_t bytes_traversed = 0;
+        off_t offset = 0;
+        while (bytes_traversed + block_size <= disk_size) {
+            ssize_t bytes = pwrite(fd, buffer, block_size, offset);
+            if (bytes < 0) {
+                perror("Write failed");
+                break;
+            }
+            bytes_traversed += bytes;
+            offset += block_size + stride_size;
         }
-        bytes_traversed += bytes; // this way we only write up to total_bytes, not more
-        // written += bytes;
-        offset += block_size + stride_size; // advance by block size + stride
+
+        if (i < loops - 1) {
+            if (lseek(fd, 0, SEEK_SET) < 0) {
+                perror("Failed to reset file cursor");
+                break;
+            }
+        }
     }
 
     fsync(fd);
@@ -265,10 +303,7 @@ void io_stride_test_W(const char *device, size_t block_size, size_t stride_size)
     free(buffer);
     close(fd);
 
-    int passed_device = 1;
-    if(strcmp("/dev/sda2", device)) { // device is hdd
-        passed_device = 0;
-    }
+    int passed_device = strcmp(device, "/dev/sda2") == 0 ? 0 : 1; // 0 for HDD, 1 for SSD
     write_results(IO_STRIDE_W, passed_device, block_size, stride_size, throughput);
 }
 
@@ -294,6 +329,8 @@ void io_random_test_R(const char *device, size_t block_size) {
 
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     size_t bytes_traversed = 0;
+    size_t disk_size = (strcmp(device, "/dev/sdb1") == 0) ? 512L * 1024 * 1024 : total_bytes; // 512 MB for SSD
+    int loops = (total_bytes > disk_size) ? 2 : 1;
     // size_t bytes_read = 0;
     
     // generate an array of offset values based on smallest block size, loop through them to simulate randomness
@@ -315,16 +352,28 @@ void io_random_test_R(const char *device, size_t block_size) {
     gettimeofday(&start, NULL);
 
     // int i = 0;
-    while (bytes_traversed + block_size <= total_bytes) {
-        off_t offset = (rand() % (total_bytes / block_size)) * block_size;
+    for (int i = 0; i < loops; i++) {
+        size_t bytes_traversed = 0;
+        while (bytes_traversed + block_size <= disk_size) {
+            // Generate a random offset within the disk range, aligned to block_size
+            off_t offset = (rand() % (disk_size / block_size)) * block_size;
 
-        ssize_t bytes = pread(fd, buffer, block_size, offset);
-        if (bytes < 0) {
-            perror("Read failed");
-            break;
+            ssize_t bytes = pread(fd, buffer, block_size, offset);
+            if (bytes < 0) {
+                perror("Read failed");
+                break;
+            }
+            bytes_traversed += bytes;
         }
-        bytes_traversed += bytes;
+
+        if (i < loops - 1) {
+            if (lseek(fd, 0, SEEK_SET) < 0) {
+                perror("Failed to reset file cursor");
+                break;
+            }
+        }
     }
+
 
     gettimeofday(&end, NULL);
 
@@ -336,10 +385,7 @@ void io_random_test_R(const char *device, size_t block_size) {
     free(buffer);
     close(fd);
 
-    int passed_device = 1;
-    if(strcmp("/dev/sda2", device)) { // device is hdd
-        passed_device = 0;
-    }
+    int passed_device = strcmp(device, "/dev/sda2") == 0 ? 0 : 1; // 0 for HDD, 1 for SSD
     write_results(RANDOM_IO_R, passed_device, block_size, 0, throughput);
     return;
 }
@@ -364,6 +410,8 @@ void io_random_test_W(const char *device, size_t block_size) {
     memset(buffer, 0, block_size);
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     size_t bytes_traversed = 0;
+    size_t disk_size = (strcmp(device, "/dev/sdb1") == 0) ? 512L * 1024 * 1024 : total_bytes; // 512 MB for SSD
+    int loops = (total_bytes > disk_size) ? 2 : 1;
     // size_t written = 0; Do we need this?
 
     // generate an array of offset values based on smallest block size, loop through them to simulate randomness
@@ -387,17 +435,28 @@ void io_random_test_W(const char *device, size_t block_size) {
 
     //int i = 0;
     //off_t offset = offset_pool[i];
-    while (bytes_traversed + block_size <= total_bytes) {
-        // Generate a random offset within the 1 GB range, aligned to block_size
-        off_t offset = (rand() % (total_bytes / block_size)) * block_size;
+    for (int i = 0; i < loops; i++) {
+        size_t bytes_traversed = 0;
+        while (bytes_traversed + block_size <= disk_size) {
+            // Generate a random offset within the disk range, aligned to block_size
+            off_t offset = (rand() % (disk_size / block_size)) * block_size;
 
-        ssize_t bytes = pwrite(fd, buffer, block_size, offset);
-        if (bytes < 0) {
-            perror("Write failed");
-            break;
+            ssize_t bytes = pwrite(fd, buffer, block_size, offset);
+            if (bytes < 0) {
+                perror("Write failed");
+                break;
+            }
+            bytes_traversed += bytes;
         }
-        bytes_traversed += bytes;
+
+        if (i < loops - 1) {
+            if (lseek(fd, 0, SEEK_SET) < 0) {
+                perror("Failed to reset file cursor");
+                break;
+            }
+        }
     }
+
 
     fsync(fd);
     gettimeofday(&end, NULL);
@@ -410,10 +469,7 @@ void io_random_test_W(const char *device, size_t block_size) {
     free(buffer);
     close(fd);
 
-    int passed_device = 1;
-    if(strcmp("/dev/sda2", device)) { // device is hdd
-        passed_device = 0;
-    }
+    int passed_device = strcmp(device, "/dev/sda2") == 0 ? 0 : 1; // 0 for HDD, 1 for SSD
     write_results(RANDOM_IO_W, passed_device, block_size, 0, throughput);
     return;
 }
