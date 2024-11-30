@@ -203,7 +203,8 @@ void io_stride_test_R(const char *device, size_t block_size, size_t stride_size)
         }
         bytes_traversed += bytes + stride_size; // this way, we only read up to total_bytes and not more than that
         bytes_read += bytes;
-        offset = bytes_traversed % disk_size; // advance by block size + stride
+        offset += bytes_traversed; // advance by block size + stride
+        offset %= disk_size;
     }
 
     gettimeofday(&end, NULL);
@@ -224,6 +225,12 @@ void io_stride_test_R(const char *device, size_t block_size, size_t stride_size)
 // Test for I/O Stride, write
 /* Same as previous test, leaves a configurable amount of space between each I/O request in the sequential write */
 void io_stride_test_W(const char *device, size_t block_size, size_t stride_size) {
+    // get an integer representation of device (0 for hdd, 1 for ssd)
+    int passed_device = 1;
+    if(strcmp("/dev/sda2", device)) { // device is hdd
+        passed_device = 0;
+    }
+
     int fd = open(device, O_WRONLY | O_DIRECT);
     if (fd < 0) {
         perror("Failed to open device");
@@ -236,8 +243,11 @@ void io_stride_test_W(const char *device, size_t block_size, size_t stride_size)
         close(fd);
         return;
     }
-
     memset(buffer, 0, block_size);
+
+    size_t disk_size;
+    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 / 2);
+
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     size_t written = 0;
     size_t bytes_traversed;
@@ -252,9 +262,10 @@ void io_stride_test_W(const char *device, size_t block_size, size_t stride_size)
             perror("Write failed");
             break;
         }
-        bytes_traversed += bytes + offset; // this way we only write up to total_bytes, not more
+        bytes_traversed += bytes + stride_size; // this way we only write up to total_bytes, not more
         written += bytes;
-        offset += block_size + stride_size; // advance by block size + stride
+        offset += bytes_traversed; // advance by block size + stride
+        offset %= disk_size;
     }
 
     fsync(fd);
@@ -268,10 +279,6 @@ void io_stride_test_W(const char *device, size_t block_size, size_t stride_size)
     free(buffer);
     close(fd);
 
-    int passed_device = 1;
-    if(strcmp("/dev/sda2", device)) { // device is hdd
-        passed_device = 0;
-    }
     write_results(IO_STRIDE_W, passed_device, block_size, stride_size, throughput);
 }
 
@@ -281,6 +288,12 @@ void io_stride_test_W(const char *device, size_t block_size, size_t stride_size)
 /* Same as previous test, leaves a random amount of space between each I/O request in the sequential read instead of configurable
  * Random I/O access within a 1 GB swath at block_size granularity */
 void io_random_test_R(const char *device, size_t block_size) {
+    // get an integer representation of device (0 for hdd, 1 for ssd)
+    int passed_device = 1;
+    if(strcmp("/dev/sda2", device)) { // device is hdd
+        passed_device = 0;
+    }
+
     int fd = open(device, O_RDONLY | O_DIRECT);
     if (fd < 0) {
         perror("Failed to open device");
@@ -294,6 +307,9 @@ void io_random_test_R(const char *device, size_t block_size) {
         return;
     }
     memset(buffer, 1, block_size); // ensure buffer is cached
+
+    size_t disk_size;
+    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 / 2);
 
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     size_t bytes_traversed = 0;
@@ -317,17 +333,23 @@ void io_random_test_R(const char *device, size_t block_size) {
     struct timeval start, end;
     gettimeofday(&start, NULL);
 
+    /* stride_size represents the current random stride
+     * offset represents the total amount we want to offset into the file
+     */
     int i = 0;
-    off_t offset = 0;
+    off_t stride_size = 0;
+    off_t offset = stride_size;
     while (bytes_traversed < total_bytes) {
         ssize_t bytes = pread(fd, buffer, block_size, offset);
         if (bytes < 0) {
             perror("Read failed");
             break;
         }
-        bytes_traversed += bytes + offset; // this way, we only read up to total_bytes and not more than that
+        bytes_traversed += bytes + stride_size; // this way, we only read up to total_bytes and not more than that
         bytes_read += bytes;
-        offset += block_size + offset_pool[i]; // advance by block size + stride
+        offset += bytes_traversed; // advance by block size + stride
+        offset = offset % disk_size;
+        stride_size = offset_pool[i]
         i++;
         if(i == 4096) { i = 0; }
     }
@@ -342,10 +364,6 @@ void io_random_test_R(const char *device, size_t block_size) {
     free(buffer);
     close(fd);
 
-    int passed_device = 1;
-    if(strcmp("/dev/sda2", device)) { // device is hdd
-        passed_device = 0;
-    }
     write_results(RANDOM_IO_R, passed_device, block_size, 0, throughput);
     return;
 }
