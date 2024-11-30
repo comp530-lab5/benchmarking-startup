@@ -164,6 +164,12 @@ void io_size_test_W(const char *device, size_t block_size) {
 // Test for I/O Stride, read
 /* Same as previous test, leaves a configurable amount of space between each I/O request in the sequential read */
 void io_stride_test_R(const char *device, size_t block_size, size_t stride_size) {
+    // get an integer representation of device (0 for hdd, 1 for ssd)
+    int passed_device = 1;
+    if(strcmp("/dev/sda2", device)) { // device is hdd
+        passed_device = 0;
+    }
+
     int fd = open(device, O_RDONLY | O_DIRECT);
     if (fd < 0) {
         perror("Failed to open device");
@@ -177,6 +183,9 @@ void io_stride_test_R(const char *device, size_t block_size, size_t stride_size)
         return;
     }
     memset(buffer, 1, block_size); // ensure buffer is cached
+
+    size_t disk_size;
+    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 / 2);
 
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     size_t bytes_traversed = 0;
@@ -192,9 +201,9 @@ void io_stride_test_R(const char *device, size_t block_size, size_t stride_size)
             perror("Read failed");
             break;
         }
-        bytes_traversed += bytes + offset; // this way, we only read up to total_bytes and not more than that
+        bytes_traversed += bytes + stride_size; // this way, we only read up to total_bytes and not more than that
         bytes_read += bytes;
-        offset += block_size + stride_size; // advance by block size + stride
+        offset = bytes_traversed % disk_size; // advance by block size + stride
     }
 
     gettimeofday(&end, NULL);
@@ -207,10 +216,6 @@ void io_stride_test_R(const char *device, size_t block_size, size_t stride_size)
     free(buffer);
     close(fd);
 
-    int passed_device = 1;
-    if(strcmp("/dev/sda2", device)) { // device is hdd
-        passed_device = 0;
-    }
     write_results(IO_STRIDE_R, passed_device, block_size, stride_size, throughput);
 }
 
