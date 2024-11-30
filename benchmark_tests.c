@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include <string.h>
 #include <errno.h>
+#include <math.h>
 
 enum Test_type {
     IO_SIZE_R,
@@ -292,11 +293,27 @@ void io_random_test_R(const char *device, size_t block_size) {
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     size_t bytes_traversed = 0;
     size_t bytes_read = 0;
-    off_t offset = 0; // keeps track of the current logical block address for the next write
+    
+    // generate an array of offset values based on smallest block size, loop through them to simulate randomness
+    // we need array to be max if we had writes of 4KB and offsets of 4KB. 4KB - 2^12 bytes, 8KB 2^13 bytes
+    // actually, just loop through array. 50k is too big
+    off_t offset_pool[4096];
+
+    // populate offset_pool, units are bytes (first entry is 4KB)
+    off_t available_sizes[16] = {pow(2, 12), pow(2, 13), pow(2, 14), pow(2, 15), 
+        pow(2, 16), pow(2, 17), pow(2, 18), pow(2, 19), 
+        pow(2, 20), pow(2, 20)*5, pow(2, 20)*10, pow(2, 20)*15,
+        pow(2, 20)*25, pow(2, 20)*50, pow(2, 20)*75, pow(2, 20)*100};
+    for(int i = 0; i < 4096; i++) {
+        int r = rand() % 16;
+        offset_pool[i] = available_sizes[r];
+    }
 
     struct timeval start, end;
     gettimeofday(&start, NULL);
 
+    int i = 0;
+    off_t offset = 0;
     while (bytes_traversed < total_bytes) {
         ssize_t bytes = pread(fd, buffer, block_size, offset);
         if (bytes < 0) {
@@ -305,7 +322,9 @@ void io_random_test_R(const char *device, size_t block_size) {
         }
         bytes_traversed += bytes + offset; // this way, we only read up to total_bytes and not more than that
         bytes_read += bytes;
-        offset += block_size + stride_size; // advance by block size + stride
+        offset += block_size + offset_pool[i]; // advance by block size + stride
+        i++;
+        if(i == 4096) { i = 0; }
     }
 
     gettimeofday(&end, NULL);
@@ -313,7 +332,7 @@ void io_random_test_R(const char *device, size_t block_size) {
     double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
     double throughput = (double)bytes_read / elapsed / (1024 * 1024); // MB/s
 
-    printf("I/O Stride Test: Device: %s, Block size: %zu bytes, Stride: %zu bytes, Throughput: %.2f MB/s\n", device, block_size, stride_size, throughput);
+    printf("I/O Stride Test: Device: %s, Block size: %zu bytes, Throughput: %.2f MB/s\n", device, block_size, throughput);
 
     free(buffer);
     close(fd);
@@ -323,6 +342,7 @@ void io_random_test_R(const char *device, size_t block_size) {
         passed_device = 0;
     }
     write_results(RANDOM_IO_R, passed_device, block_size, 0, throughput);
+    return;
 }
 
 // Test for Random I/O, write
@@ -344,28 +364,41 @@ void io_random_test_W(const char *device, size_t block_size) {
 
     memset(buffer, 0, block_size);
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
+    size_t bytes_traversed = 0;
     size_t written = 0;
 
     // generate an array of offset values based on smallest block size, loop through them to simulate randomness
     // we need array to be max if we had writes of 4KB and offsets of 4KB. 4KB - 2^12 bytes, 8KB 2^13 bytes
-    off_t offset[total_bytes/2048];
+    // actually, just loop through array. 50k is too big
+    off_t offset_pool[4096];
 
-    // populate offset with random offsets ranging from 4KB-100MB (2^12 bytes - 2^20 * 100 bytes) (1MB = 1024 * 1024  = 2^20 bytes)
-    for(int i = 0; i < total_bytes/2048; i++) {
-        offset[i] = 
+    // populate offset_pool, units are bytes (first entry is 4KB)
+    off_t available_sizes[16] = {pow(2, 12), pow(2, 13), pow(2, 14), pow(2, 15), 
+        pow(2, 16), pow(2, 17), pow(2, 18), pow(2, 19), 
+        pow(2, 20), pow(2, 20)*5, pow(2, 20)*10, pow(2, 20)*15,
+        pow(2, 20)*25, pow(2, 20)*50, pow(2, 20)*75, pow(2, 20)*100};
+
+    for(int i = 0; i < 4096; i++) {
+        int r = rand() % 16;
+        offset_pool[i] = available_sizes[r];
     }
 
     struct timeval start, end;
     gettimeofday(&start, NULL);
 
-    while (written < total_bytes) {
-        ssize_t bytes = pwrite(fd, buffer, block_size, offset[0]);
+    int i = 0;
+    off_t offset = 0;
+    while (bytes_traversed < total_bytes) {
+        ssize_t bytes = pwrite(fd, buffer, block_size, offset);
         if (bytes < 0) {
             perror("Write failed");
             break;
         }
-        written += bytes + offset[0]; // this way we only write up to total_bytes, not more
-        offset[0] += block_size + offset[0]; // advance by block size + stride
+        bytes_traversed += bytes + offset;
+        written += bytes; // this way we only write up to total_bytes, not more
+        offset += block_size + offset_pool[i];
+        i++;
+        if(i == 4096) { i = 0; }
     }
 
     fsync(fd);
@@ -384,9 +417,8 @@ void io_random_test_W(const char *device, size_t block_size) {
         passed_device = 0;
     }
     write_results(RANDOM_IO_W, passed_device, block_size, 0, throughput);
+    return;
 }
-
-
 
 
 
@@ -502,7 +534,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    const char *device_path = (device == 1) ? "/dev/sda2" : "/dev/sdb1";
+    //const char *device_path = (device == 1) ? "/dev/sda2" : "/dev/sdb1";
+    const char *device_path = (device == 1) ? "/dev/sda2" : "/dev/sda1";
 
     switch (test_type) {
         case IO_SIZE_R:

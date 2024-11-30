@@ -13,6 +13,9 @@ O_DIRECt - have to be aligned to disk's block size? sized in multiples of block 
 Read from /dev/zeroes instead of a buffer?
 change throughput calculation for iostride
 
+fix file name parsing
+fix offset for stride and random file writing
+
 style guide
 
 
