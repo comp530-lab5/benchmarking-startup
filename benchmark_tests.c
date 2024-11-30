@@ -119,6 +119,12 @@ void io_size_test_R(const char *device, size_t block_size) {
 // device - 0 for HDD, 1 for SSD
 // block_size - size of chunks to write to disk at a time
 void io_size_test_W(const char *device, size_t block_size) {
+    // get an integer representation of device (0 for hdd, 1 for ssd)
+    int passed_device = 1;
+    if(strcmp("/dev/sda2", device)) { // device is hdd
+        passed_device = 0;
+    }
+
     int fd = open(device, O_WRONLY | O_DIRECT);
     if (fd < 0) {
         perror("Failed to open device");
@@ -131,21 +137,27 @@ void io_size_test_W(const char *device, size_t block_size) {
         close(fd);
         return;
     }
-
     memset(buffer, 0, block_size); // fill buffer with zeros to start
+                                   
+    size_t disk_size;
+    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 / 2);
+
     size_t total_bytes = 1L * 1024 * 1024 * 1024; // total memory is 1 GB
     size_t written = 0; // number of written bytes
+    off_t offset = 0;
 
     struct timeval start, end;
     gettimeofday(&start, NULL);
 
     while (written < total_bytes) {
-        ssize_t bytes = write(fd, buffer, block_size);
+        ssize_t bytes = pwrite(fd, buffer, block_size, offset);
         if (bytes < 0) {
             perror("Write failed");
             break;
         }
         written += bytes;
+        offset += bytes;
+        offset %= disk_size;
     }
 
     fsync(fd);
@@ -160,11 +172,8 @@ void io_size_test_W(const char *device, size_t block_size) {
     free(buffer);
     close(fd);
 
-    int passed_device = 1;
-    if(strcmp("/dev/sda2", device)) { // device is hdd
-        passed_device = 0;
-    }
     write_results(IO_SIZE_W, passed_device, block_size, 0, throughput);
+    return;
 }
 
 
@@ -358,7 +367,7 @@ void io_random_test_R(const char *device, size_t block_size) {
         bytes_read += bytes;
         offset += bytes_traversed; // advance by block size + stride
         offset = offset % disk_size;
-        stride_size = offset_pool[i]
+        stride_size = offset_pool[i];
         i++;
         if(i == 4096) { i = 0; }
     }
