@@ -24,3 +24,11 @@ style guide
 
 WRITEUP NOTES:
 /dev/sbd1 is only 512MB, so we used /dev/sda1, which was a 1GB drive
+
+
+UPDATES:
+ok, so - the 1gb drive we were using is a HDD, not an SSD which is why the speeds were so similar. I changed our code back to the version that runs the 512M SSD and asked a question on campuswire about it. so i think we just wait on that
+
+finished the testing script - this version will take fucking forever to run. 
+
+left to do - make sure io_stride and random_io work correctly (i'm not sure how pread and pwrite work with the offset thing)
