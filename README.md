@@ -15,6 +15,8 @@ change throughput calculation for iostride
 
 fix file name parsing
 fix offset for stride and random file writing
+make last point happen 10 times
+change to 5 instead of 10
 
 style guide
 
