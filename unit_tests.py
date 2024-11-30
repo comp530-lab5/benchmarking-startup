@@ -1,5 +1,6 @@
 import subprocess
 
+# 1 for HDD, 2 for SSD
 command = "./benchmark_tests -d1 -t2 -b4096"
 
 try:

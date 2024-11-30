@@ -23,8 +23,12 @@ enum Device {
     SSD
 };
 
+// used to specify file where results are output to
+static char rfile_extension[30] = "default";
+
 // Function prototypes
 void help();
+void write_results(enum Test_type test_type, enum Device device, int block_size, int stride_size, double throughput); 
 void io_size_test_R(const char *device, size_t block_size);
 void io_size_test_W(const char *device, size_t block_size);
 void io_stride_test_R(const char *device, size_t block_size, size_t stride_size);
@@ -39,6 +43,7 @@ void help() {
     printf("\t-d - device - HDD (1), SSD (2)\n");
     printf("\t-b - block size in bytes (e.g., 4096 for 4KB)\n");
     printf("\t-s - stride size in bytes (optional, only for I/O Stride test)\n");
+    printf("\t-e - results file extension name\n");
     printf("\t-h - help\n");
 }
 
@@ -54,7 +59,7 @@ void io_size_test_R(const char *device, size_t block_size) {
         return;
     }
 
-    void *buffer = aligned_alloc(1024, block_size); // Allocates a block worth of memory 
+    void *buffer = aligned_alloc(4096, block_size); // Allocates a block worth of memory 
     if (!buffer) {
         perror("Failed to allocate buffer");
         close(fd);
@@ -88,7 +93,14 @@ void io_size_test_R(const char *device, size_t block_size) {
 
     free(buffer);
     close(fd);
+
+    int passed_device = 1;
+    if(strcmp("/dev/sda2", device)) { // device is hdd
+        passed_device = 0;
+    }
+    write_results(IO_SIZE_R, passed_device, block_size, 0, throughput);
 }
+
 
 
 
@@ -104,7 +116,7 @@ void io_size_test_W(const char *device, size_t block_size) {
         return;
     }
 
-    void *buffer = aligned_alloc(1024, block_size); // Allocates a block worth of memory 
+    void *buffer = aligned_alloc(4096, block_size); // Allocates a block worth of memory 
     if (!buffer) {
         perror("Failed to allocate buffer");
         close(fd);
@@ -138,6 +150,12 @@ void io_size_test_W(const char *device, size_t block_size) {
 
     free(buffer);
     close(fd);
+
+    int passed_device = 1;
+    if(strcmp("/dev/sda2", device)) { // device is hdd
+        passed_device = 0;
+    }
+    write_results(IO_SIZE_W, passed_device, block_size, 0, throughput);
 }
 
 
@@ -151,7 +169,7 @@ void io_stride_test_R(const char *device, size_t block_size, size_t stride_size)
         return;
     }
 
-    void *buffer = aligned_alloc(1024, block_size);
+    void *buffer = aligned_alloc(4096, block_size);
     if (!buffer) {
         perror("Failed to allocate buffer");
         close(fd);
@@ -160,19 +178,21 @@ void io_stride_test_R(const char *device, size_t block_size, size_t stride_size)
     memset(buffer, 1, block_size); // ensure buffer is cached
 
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
+    size_t bytes_traversed = 0;
     size_t bytes_read = 0;
     off_t offset = 0; // keeps track of the current logical block address for the next write
 
     struct timeval start, end;
     gettimeofday(&start, NULL);
 
-    while (bytes_read < total_bytes) {
+    while (bytes_traversed < total_bytes) {
         ssize_t bytes = pread(fd, buffer, block_size, offset);
         if (bytes < 0) {
             perror("Read failed");
             break;
         }
-        bytes_read += bytes + offset; // this way, we only read up to total_bytes and not more than that
+        bytes_traversed += bytes + offset; // this way, we only read up to total_bytes and not more than that
+        bytes_read += bytes;
         offset += block_size + stride_size; // advance by block size + stride
     }
 
@@ -185,6 +205,12 @@ void io_stride_test_R(const char *device, size_t block_size, size_t stride_size)
 
     free(buffer);
     close(fd);
+
+    int passed_device = 1;
+    if(strcmp("/dev/sda2", device)) { // device is hdd
+        passed_device = 0;
+    }
+    write_results(IO_STRIDE_R, passed_device, block_size, stride_size, throughput);
 }
 
 
@@ -198,7 +224,7 @@ void io_stride_test_W(const char *device, size_t block_size, size_t stride_size)
         return;
     }
 
-    void *buffer = aligned_alloc(1024, block_size);
+    void *buffer = aligned_alloc(4096, block_size);
     if (!buffer) {
         perror("Failed to allocate buffer");
         close(fd);
@@ -208,18 +234,20 @@ void io_stride_test_W(const char *device, size_t block_size, size_t stride_size)
     memset(buffer, 0, block_size);
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     size_t written = 0;
+    size_t bytes_traversed;
     off_t offset = 0; // keeps track of the current logical block address for the next write
 
     struct timeval start, end;
     gettimeofday(&start, NULL);
 
-    while (written < total_bytes) {
+    while (bytes_traversed < total_bytes) {
         ssize_t bytes = pwrite(fd, buffer, block_size, offset);
         if (bytes < 0) {
             perror("Write failed");
             break;
         }
-        written += bytes + offset; // this way we only write up to total_bytes, not more
+        bytes_traversed += bytes + offset; // this way we only write up to total_bytes, not more
+        written += bytes;
         offset += block_size + stride_size; // advance by block size + stride
     }
 
@@ -233,22 +261,81 @@ void io_stride_test_W(const char *device, size_t block_size, size_t stride_size)
 
     free(buffer);
     close(fd);
+
+    int passed_device = 1;
+    if(strcmp("/dev/sda2", device)) { // device is hdd
+        passed_device = 0;
+    }
+    write_results(IO_STRIDE_W, passed_device, block_size, stride_size, throughput);
 }
 
 
 
+// Test for Random I/O, read
+/* Same as previous test, leaves a random amount of space between each I/O request in the sequential read instead of configurable
+ * Random I/O access within a 1 GB swath at block_size granularity */
+void io_random_test_R(const char *device, size_t block_size) {
+    int fd = open(device, O_RDONLY | O_DIRECT);
+    if (fd < 0) {
+        perror("Failed to open device");
+        return;
+    }
+
+    void *buffer = aligned_alloc(4096, block_size);
+    if (!buffer) {
+        perror("Failed to allocate buffer");
+        close(fd);
+        return;
+    }
+    memset(buffer, 1, block_size); // ensure buffer is cached
+
+    size_t total_bytes = 1L * 1024 * 1024 * 1024;
+    size_t bytes_traversed = 0;
+    size_t bytes_read = 0;
+    off_t offset = 0; // keeps track of the current logical block address for the next write
+
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+
+    while (bytes_traversed < total_bytes) {
+        ssize_t bytes = pread(fd, buffer, block_size, offset);
+        if (bytes < 0) {
+            perror("Read failed");
+            break;
+        }
+        bytes_traversed += bytes + offset; // this way, we only read up to total_bytes and not more than that
+        bytes_read += bytes;
+        offset += block_size + stride_size; // advance by block size + stride
+    }
+
+    gettimeofday(&end, NULL);
+
+    double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
+    double throughput = (double)bytes_read / elapsed / (1024 * 1024); // MB/s
+
+    printf("I/O Stride Test: Device: %s, Block size: %zu bytes, Stride: %zu bytes, Throughput: %.2f MB/s\n", device, block_size, stride_size, throughput);
+
+    free(buffer);
+    close(fd);
+
+    int passed_device = 1;
+    if(strcmp("/dev/sda2", device)) { // device is hdd
+        passed_device = 0;
+    }
+    write_results(RANDOM_IO_R, passed_device, block_size, 0, throughput);
+}
 
 // Test for Random I/O, write
 /* Same as previous test, leaves a random amount of space between each I/O request in the sequential write instead of configurable
  * Random I/O access within a 1 GB swath at block_size granularity */
-void io_stride_test_W(const char *device, size_t block_size) {
+void io_random_test_W(const char *device, size_t block_size) {
     int fd = open(device, O_WRONLY | O_DIRECT);
     if (fd < 0) {
         perror("Failed to open device");
         return;
     }
 
-    void *buffer = aligned_alloc(1024, block_size);
+    void *buffer = aligned_alloc(4096, block_size);
     if (!buffer) {
         perror("Failed to allocate buffer");
         close(fd);
@@ -258,20 +345,27 @@ void io_stride_test_W(const char *device, size_t block_size) {
     memset(buffer, 0, block_size);
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     size_t written = 0;
-    off_t offset = 0; // keeps track of the current logical block address for the next write
+
     // generate an array of offset values based on smallest block size, loop through them to simulate randomness
+    // we need array to be max if we had writes of 4KB and offsets of 4KB. 4KB - 2^12 bytes, 8KB 2^13 bytes
+    off_t offset[total_bytes/2048];
+
+    // populate offset with random offsets ranging from 4KB-100MB (2^12 bytes - 2^20 * 100 bytes) (1MB = 1024 * 1024  = 2^20 bytes)
+    for(int i = 0; i < total_bytes/2048; i++) {
+        offset[i] = 
+    }
 
     struct timeval start, end;
     gettimeofday(&start, NULL);
 
     while (written < total_bytes) {
-        ssize_t bytes = pwrite(fd, buffer, block_size, offset);
+        ssize_t bytes = pwrite(fd, buffer, block_size, offset[0]);
         if (bytes < 0) {
             perror("Write failed");
             break;
         }
-        written += bytes + offset; // this way we only write up to total_bytes, not more
-        offset += block_size + stride_size; // advance by block size + stride
+        written += bytes + offset[0]; // this way we only write up to total_bytes, not more
+        offset[0] += block_size + offset[0]; // advance by block size + stride
     }
 
     fsync(fd);
@@ -280,10 +374,72 @@ void io_stride_test_W(const char *device, size_t block_size) {
     double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
     double throughput = (double)written / elapsed / (1024 * 1024); // MB/s
 
-    printf("I/O Stride Test: Device: %s, Block size: %zu bytes, Stride: %zu bytes, Throughput: %.2f MB/s\n", device, block_size, stride_size, throughput);
+    printf("I/O Stride Test: Device: %s, Block size: %zu bytes, Throughput: %.2f MB/s\n", device, block_size, throughput);
 
     free(buffer);
     close(fd);
+
+    int passed_device = 1;
+    if(strcmp("/dev/sda2", device)) { // device is hdd
+        passed_device = 0;
+    }
+    write_results(RANDOM_IO_W, passed_device, block_size, 0, throughput);
+}
+
+
+
+
+
+
+
+// stride_size is 0 for tests other than 2,3
+void write_results(enum Test_type test_type, enum Device device, int block_size, int stride_size, double throughput) {
+    // construct results file path
+    char filepath[80] = "";
+    strcat(filepath, "results/test_");
+    strcat(filepath, rfile_extension);
+    strcat(filepath, ".csv");
+
+    // append to results file
+    FILE *pFile;
+    pFile = fopen(filepath, "a");
+    if (pFile == NULL) {
+        perror("Failed to open results file");
+        return;
+    }
+
+    // "test_type","device","block_size","stride_size","throughput"
+    char block_size_string[12];
+    char stride_size_string[12];
+    char throughput_string[50];
+    sprintf(block_size_string, "%d", block_size);
+    sprintf(stride_size_string, "%d", stride_size);
+    sprintf(throughput_string, "%f", throughput);
+    char csv_entry[300];
+    csv_entry[0] = '\"';
+    csv_entry[1] = '0' + test_type;
+    csv_entry[2] = '\"';
+    csv_entry[3] = ',';
+    csv_entry[4] = '\"';
+    csv_entry[5] = '0' + device;
+    csv_entry[6] = '\"';
+    csv_entry[7] = ',';
+    csv_entry[8] = '\"';
+    csv_entry[9] = '\0';
+    strcat(csv_entry, block_size_string);
+    strcat(csv_entry, "\",\"");
+    strcat(csv_entry, stride_size_string);
+    strcat(csv_entry, "\",\"");
+    strcat(csv_entry, throughput_string);
+    strcat(csv_entry, "\"\n");
+
+    if(fputs(csv_entry, pFile) == EOF) {
+        perror("Failed to write to results file\n");
+        fclose(pFile);
+        return;
+    }
+
+    fclose(pFile);
 }
 
 
@@ -296,7 +452,7 @@ int main(int argc, char **argv) {
     size_t stride_size = 0;
     int c;
 
-    while ((c = getopt(argc, argv, "t:d:b:s:h")) != -1) { 
+    while ((c = getopt(argc, argv, "t:d:b:s:he")) != -1) { 
         // t = test, d = device, s = stride size, b = block size
         switch (c) {
             case 'h':
@@ -328,6 +484,10 @@ int main(int argc, char **argv) {
                 break;
             case 's':
                 stride_size = strtoul(optarg, NULL, 10);
+                break;
+            case 'e':
+                strncpy(rfile_extension, optarg, sizeof(rfile_extension-1));
+                rfile_extension[sizeof(rfile_extension)-1] = '\0';
                 break;
             default:
                 printf("Unknown option.\n");
