@@ -1,48 +1,44 @@
 import subprocess
-"""
-
-# 1 for HDD, 2 for SSD
-command = "./benchmark_tests -d1 -t2 -b4096"
-
-try:
-    result = subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
-
-    print("Command output:")
-    print(f"Error message: {result.stderr}")
-    print(result.stdout)
-except subprocess.CalledProcessError as e:
-    print(f"Command failed with exit code {e.returncode}")
-    print(f"Error message: {e.stderr}")
-    print(result.stdout)
-
-"""
 import math
 
 chunk_size = (math.floor((((math.pow(2, 20)*100) - math.pow(2, 12)) / 16) / math.pow(2, 12))) * math.pow(2, 12);
-extension = "test"
+extension = "test" # results will be output to test_{extension}.c
 
-## TEST 1, HDD
-size = 4096;
-for i in range(16):
-    for i in range(10):
-        command = f"./benchmark_tests -d1 -t1 -b{size} -e{extension}"
-        subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
-   size += chunk_size
-
-size = math.pow(2, 20) * 100;
-command = f"./benchmark_tests -d1 -t1 -b{size} -e{extension}"
-subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
+devices = [1, 2]
+tests_1 = [1, 2, 5, 6]
 
 
+# I/O Size, Random I/O
+for test in tests_1:
+    for device in devices:
+        size = 4096
+        for i in range(16):
+            for j in range(5):
+                command = f"./benchmark_tests -d{device} -t{test} -b{size} -e{extension}"
+                subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
+           size += chunk_size
 
-## TEST 1, SSD
-size = 4096;
-for i in range(16):
-    for i in range(10):
-        command = f"./benchmark_tests -d2 -t1 -b{size} -e{extension}"
-        subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
-   size += chunk_size
+        size = math.pow(2, 20) * 100;
+        for i in range(5):
+            command = f"./benchmark_tests -d{device} -t{test} -b{size} -e{extension}"
+            subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
 
-size = math.pow(2, 20) * 100;
-command = f"./benchmark_tests -d2 -t1 -b{size} -e{extension}"
-subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
+
+
+tests_2 = [3, 4]
+granularity_sizes = [math.pow(2, 12), math.pow(2, 13), math.pow(2, 14), math.pow(2, 16), math.pow(2, 20), math.pow(2, 20)*10] # in bytes
+
+# I/O Stride
+for test in tests_2:
+    for device in devices:
+        for granularity in granularity_sizes:
+            stride = 4096
+            for i in range(16):
+                for j in range(5):
+                    command = f"./benchmark_tests -d{device} -t{test} -b{granularity} -s{stride} -e{extension}"
+                    subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
+                stride += chunk_size
+            stride = math.pow(2, 20) * 100;
+            for i in range(5):
+                command = f"./benchmark_tests -d{device} -t{test} -b{granularity} -s{stride} -e{extension}"
+                subprocess.run(command, shell=True, check=True, text=True, capture_output=True)

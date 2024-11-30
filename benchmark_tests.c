@@ -69,6 +69,8 @@ void io_size_test_R(const char *device, size_t block_size) {
     memset(buffer, 1, block_size); // memset to ensure buffer is cached and doesn't bottleneck test
 
     size_t total_bytes = 1L * 1024 * 1024 * 1024; // total memory is 1 GB
+    // TODO: delete
+    total_bytes /= 2;
     size_t bytes_read = 0; // number of written bytes
 
     struct timeval start, end;
