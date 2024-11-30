@@ -484,7 +484,7 @@ int main(int argc, char **argv) {
     size_t stride_size = 0;
     int c;
 
-    while ((c = getopt(argc, argv, "t:d:b:s:he")) != -1) { 
+    while ((c = getopt(argc, argv, "t:d:b:s:he:")) != -1) { 
         // t = test, d = device, s = stride size, b = block size
         switch (c) {
             case 'h':

@@ -13,7 +13,7 @@ O_DIRECt - have to be aligned to disk's block size? sized in multiples of block 
 Read from /dev/zeroes instead of a buffer?
 change throughput calculation for iostride
 
-fix file name parsing
+X fix file name parsing
 fix offset for stride and random file writing
 make last point happen 10 times
 change to 5 instead of 10
@@ -23,4 +23,4 @@ style guide
 
 
 WRITEUP NOTES:
-/dev/sbd1 is only 512MB, so we wrote/read to the disk twice to reach 1GB
+/dev/sbd1 is only 512MB, so we used /dev/sda1, which was a 1GB drive
