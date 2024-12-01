@@ -22,7 +22,7 @@ style guide
 
 WRITEUP NOTES:
 /dev/sbd1 is only 512MB, so we used /dev/sda1, which was a 1GB drive
-
+SSD offsets can get weird - might slow things down
 
 UPDATES:
 ok, so - the 1gb drive we were using is a HDD, not an SSD which is why the speeds were so similar. I changed our code back to the version that runs the 512M SSD and asked a question on campuswire about it. so i think we just wait on that
