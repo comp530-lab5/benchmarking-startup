@@ -3,7 +3,7 @@ import math
 
 # Generate block sizes based on powers of 2, from 4 KB (2^12) to 100 MB (2^20 * 100)
 block_sizes = [2**i for i in range(12, 21)] + [100 * (2**20)]
-extension = "test" # results will be output to test_{extension}.c
+extension = "final_data" # results will be output to test_{extension}.c
 
 devices = [1, 2]
 tests_1 = [1, 2, 5, 6]

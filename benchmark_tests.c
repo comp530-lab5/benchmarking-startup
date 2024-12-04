@@ -75,7 +75,7 @@ void io_size_test_R(const char *device, size_t block_size) {
     memset(buffer, 1, block_size); // memset to ensure buffer is cached and doesn't bottleneck test
 
     size_t disk_size;
-    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 / 2);
+    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 * 2);
 
     size_t total_bytes = 1L * 1024 * 1024 * 1024; // total memory is 1 GB
     size_t bytes_read = 0; // number of read bytes
@@ -140,7 +140,7 @@ void io_size_test_W(const char *device, size_t block_size) {
     memset(buffer, 0, block_size); // fill buffer with zeros to start
                                    
     size_t disk_size;
-    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 / 2);
+    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 * 2);
 
     size_t total_bytes = 1L * 1024 * 1024 * 1024; // total memory is 1 GB
     size_t written = 0; // number of written bytes
@@ -202,7 +202,7 @@ void io_stride_test_R(const char *device, size_t block_size, size_t stride_size)
     memset(buffer, 1, block_size); // ensure buffer is cached
 
     size_t disk_size;
-    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 / 2);
+    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 * 2);
 
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     size_t bytes_traversed = 0;
@@ -263,7 +263,7 @@ void io_stride_test_W(const char *device, size_t block_size, size_t stride_size)
     memset(buffer, 0, block_size);
 
     size_t disk_size;
-    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 / 2);
+    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 * 2);
 
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     size_t written = 0;
@@ -326,7 +326,7 @@ void io_random_test_R(const char *device, size_t block_size) {
     memset(buffer, 1, block_size); // ensure buffer is cached
 
     size_t disk_size;
-    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 / 2);
+    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 * 2);
 
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     size_t bytes_traversed = 0;
@@ -411,7 +411,7 @@ void io_random_test_W(const char *device, size_t block_size) {
     memset(buffer, 0, block_size);
 
     size_t disk_size;
-    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 / 2);
+    disk_size = (passed_device == 0) ? (1L * 1024 * 1024 * 1024 * 2) : (1L * 1024 * 1024 * 1024 * 2);
 
     size_t total_bytes = 1L * 1024 * 1024 * 1024;
     size_t bytes_traversed = 0;
@@ -587,8 +587,11 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    const char *device_path = (device == 1) ? "/dev/sda2" : "/dev/sdb1";
+    //const char *device_path = (device == 1) ? "/dev/sda2" : "/dev/sdb1";
     //const char *device_path = (device == 1) ? "/dev/sda2" : "/dev/sda1";
+    // 1 for ssd, 0 for hdd in this instance
+    const char *device_path = (device == 1) ? "/mnt/c/530-tests/ssd-doc.txt" : "/mnt/h/530-tests/hdd-doc.txt";
+
 
     switch (test_type) {
         case IO_SIZE_R:
