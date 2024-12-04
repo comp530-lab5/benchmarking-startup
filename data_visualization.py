@@ -91,4 +91,3 @@ for test_type, test_name in [(0, "IO_Size_Read"), (1, "IO_Size_Write"), (2, "IO_
                          f"{test_name} Throughput by Stride Size (Block Size {block_size})",
                          "Stride Size (bytes)", "Throughput (MB/s)",
                          f"graphs/{test_name}_BlockSize_{block_size}_Overlayed.png")
-
