@@ -1,7 +1,8 @@
 import subprocess
 import math
 
-chunk_size = (math.floor((((math.pow(2, 20)*100) - math.pow(2, 12)) / 16) / math.pow(2, 12))) * math.pow(2, 12);
+# Generate block sizes based on powers of 2, from 4 KB (2^12) to 100 MB (2^20 * 100)
+block_sizes = [2**i for i in range(12, 21)] + [100 * (2**20)]
 extension = "test" # results will be output to test_{extension}.c
 
 devices = [1, 2]
@@ -11,34 +12,21 @@ tests_1 = [1, 2, 5, 6]
 # I/O Size, Random I/O
 for test in tests_1:
     for device in devices:
-        size = 4096
-        for i in range(16):
-            for j in range(5):
+        for size in block_sizes:
+            for j in range(5):  # Repeat the test 5 times for each block size
                 command = f"./benchmark_tests -d{device} -t{test} -b{size} -e{extension}"
                 subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
-           size += chunk_size
-
-        size = math.pow(2, 20) * 100;
-        for i in range(5):
-            command = f"./benchmark_tests -d{device} -t{test} -b{size} -e{extension}"
-            subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
-
 
 
 tests_2 = [3, 4]
-granularity_sizes = [math.pow(2, 12), math.pow(2, 13), math.pow(2, 14), math.pow(2, 16), math.pow(2, 20), math.pow(2, 20)*10] # in bytes
+stride_sizes = [2**i for i in range(12, 21)] + [100 * (2**20)]
 
 # I/O Stride
 for test in tests_2:
     for device in devices:
-        for granularity in granularity_sizes:
-            stride = 4096
-            for i in range(16):
-                for j in range(5):
+        for granularity in block_sizes:  # Granularity is equivalent to block sizes
+            for stride in stride_sizes:
+                for j in range(5):  # Repeat the test 5 times for each combination
                     command = f"./benchmark_tests -d{device} -t{test} -b{granularity} -s{stride} -e{extension}"
                     subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
-                stride += chunk_size
-            stride = math.pow(2, 20) * 100;
-            for i in range(5):
-                command = f"./benchmark_tests -d{device} -t{test} -b{granularity} -s{stride} -e{extension}"
-                subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
+
