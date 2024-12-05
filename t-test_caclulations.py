@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from scipy.stats import t
 
-data_file = "results/test.csv" # replace with path to file with data
+data_file = "results/final_data.csv"
 data = pd.read_csv(data_file, header=None, names=["test_type", "device", "block_size", "stride_size", "throughput"])
 # add headers since there are none
 
@@ -32,15 +32,20 @@ def calculate_required_samples(group, confidence_level=0.95, margin_of_error_rat
     n = len(group)
     degrees_of_freedom = n - 1
     t_score = t.ppf(1 - (1 - confidence_level) / 2, degrees_of_freedom)
+    # prevent division by zero and return NaN for invalid values, issue from our output
+    if margin_of_error == 0 or std_dev == 0 or degrees_of_freedom <= 0:
+        return np.nan
     required_samples = (t_score * std_dev / margin_of_error) ** 2
     return max(required_samples, n)  # ensure at least n samples
-
 # calculate the required samples for each data point
 grouped = data.groupby(["test_type", "device", "block_size", "stride_size"])
 results = grouped.apply(lambda group: calculate_required_samples(group)).reset_index()
 results.columns = ["test_type", "device", "block_size", "stride_size", "required_samples"]
 
+
 # save the results to a file
-results['required_samples'] = results['required_samples'].apply(np.ceil).astype(int)  # rounds up to nearest int
+results['required_samples'] = results['required_samples'].apply(
+    lambda x: np.ceil(x).astype(int) if np.isfinite(x) else 5  # default to 5 if non-finite
+    )
 results_table = results[["test_type", "device", "block_size", "stride_size", "required_samples"]]
 results_table.to_csv("results/required_samples.csv", index=False)

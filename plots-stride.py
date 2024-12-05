@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import sem, t
 
-data_file = "results/test.csv" # replace with path to file with data
+data_file = "results/final_data.csv" # replace with path to file with data
 data = pd.read_csv(data_file, header=None, names=["test_type", "device", "block_size", "stride_size", "throughput"])
 # add headers since there are none
 
@@ -19,6 +19,7 @@ def plot_with_ci(df, x, y, hue, title, xlabel, ylabel, filename):
     fig, ax = plt.subplots()
     for key, group in df.groupby(hue):
         ax.errorbar(group[x], group[y], yerr=group['ci'], label=f"{hue}={key}", capsize=5, marker='o', linestyle='-')
+    ax.set_xscale('log')  # Set x-axis to logarithmic scale
     ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
@@ -43,12 +44,11 @@ def plot_with_ci_overlayed(df, x, y, hue, title, xlabel, ylabel, filename):
 
 ## Plots graphs based on tests with only one device per graph
 # prepares the data for each test type
-for test_type, test_name in [(0, "IO_Size_Read"), (1, "IO_Size_Write"), (2, "IO_Stride_Read"), 
-                             (3, "IO_Stride_Write"), (4, "Random_IO_Read"), (5, "Random_IO_Write")]:
+for test_type, test_name in [(2, "IO_Stride_Read"), (3, "IO_Stride_Write")]:
     test_data = data[data['test_type'] == test_type]
 
     # I/O Size tests
-    if test_type in [0, 1, 4, 5]:
+    if test_type in [0,1,4,5]:
         results = test_data.groupby(['device', 'block_size']).apply(calculate_statistics).reset_index()
         for device in results['device'].unique():
             device_data = results[results['device'] == device]
@@ -66,28 +66,3 @@ for test_type, test_name in [(0, "IO_Size_Read"), (1, "IO_Size_Write"), (2, "IO_
                          f"{test_name} Throughput by Stride Size",
                          "Stride Size (bytes)", "Throughput (MB/s)",
                          f"graphs/{test_name}_Device_{device}.png")
-
-
-## Plots graphs based on tests with both devices on one graph
-# prepares the data for each test type
-for test_type, test_name in [(0, "IO_Size_Read"), (1, "IO_Size_Write"), (2, "IO_Stride_Read"), 
-                             (3, "IO_Stride_Write"), (4, "Random_IO_Read"), (5, "Random_IO_Write")]:
-    test_data = data[data['test_type'] == test_type]
-
-    # I/O Size tests
-    if test_type in [0, 1, 4, 5]:
-        results = test_data.groupby(['device', 'block_size']).apply(calculate_statistics).reset_index()
-        plot_with_ci_overlayed(results, 'block_size', 'mean', 'device',
-                     f"{test_name} Throughput by Block Size",
-                     "Block Size (bytes)", "Throughput (MB/s)",
-                     f"graphs/{test_name}_Overlayed.png")
-
-    # I/O Stride tests
-    elif test_type in [2, 3]:
-        results = test_data.groupby(['device', 'stride_size', 'block_size']).apply(calculate_statistics).reset_index()
-        for block_size in results['block_size'].unique():
-            block_data = results[results['block_size'] == block_size]
-            plot_with_ci_overlayed(block_data, 'stride_size', 'mean', 'device',
-                         f"{test_name} Throughput by Stride Size (Block Size {block_size})",
-                         "Stride Size (bytes)", "Throughput (MB/s)",
-                         f"graphs/{test_name}_BlockSize_{block_size}_Overlayed.png")
